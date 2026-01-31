@@ -1,10 +1,10 @@
 use clap::Parser;
-use rayon::prelude::*;
-use std::path::PathBuf;
-use std::time::Instant;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use env_logger::Builder;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
 
 mod album;
 mod convert;
@@ -46,7 +46,7 @@ fn main() -> anyhow::Result<()> {
         builder.filter_level(log::LevelFilter::Info);
     }
     builder.init();
-    
+
     let start_time = Instant::now();
 
     let scan_path = match &args.target {
@@ -75,11 +75,19 @@ fn main() -> anyhow::Result<()> {
 
         match convert::collect_album_tasks(album, &args.input, &args.output, args.quality) {
             Ok(album_tasks) => {
-                log::debug!("Found {} tasks for album: {:?}", album_tasks.len(), album.path);
+                log::debug!(
+                    "Found {} tasks for album: {:?}",
+                    album_tasks.len(),
+                    album.path
+                );
                 all_tasks.extend(album_tasks);
             }
             Err(e) => {
-                log::error!("Failed to prepare tasks for album {:?}: {:#}", album.path, e);
+                log::error!(
+                    "Failed to prepare tasks for album {:?}: {:#}",
+                    album.path,
+                    e
+                );
             }
         }
     }
@@ -121,10 +129,12 @@ fn main() -> anyhow::Result<()> {
 
     let duration = start_time.elapsed();
     log::info!("Conversion finished in {:.2?}", duration);
-    log::info!("Summary: {} successful, {} failed, {} skipped (mixed albums).", 
-               success_count.load(Ordering::Relaxed), 
-               failure_count.load(Ordering::Relaxed), 
-               mixed_count);
+    log::info!(
+        "Summary: {} successful, {} failed, {} skipped (mixed albums).",
+        success_count.load(Ordering::Relaxed),
+        failure_count.load(Ordering::Relaxed),
+        mixed_count
+    );
 
     Ok(())
 }
