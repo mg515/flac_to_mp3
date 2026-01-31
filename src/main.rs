@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use env_logger::Builder;
+use indicatif::{ProgressBar, ProgressStyle};
 
 mod album;
 mod convert;
@@ -28,17 +29,24 @@ struct Args {
     /// Specific album or subdirectory to convert (relative to input root)
     #[arg(short, long)]
     target: Option<PathBuf>,
+
+    /// Enable debug logging
+    #[arg(short, long)]
+    debug: bool,
 }
 
 fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+
     // Initialize logger
     let mut builder = Builder::from_default_env();
-    if std::env::var("RUST_LOG").is_err() {
+    if args.debug {
+        builder.filter_level(log::LevelFilter::Debug);
+    } else if std::env::var("RUST_LOG").is_err() {
         builder.filter_level(log::LevelFilter::Info);
     }
     builder.init();
     
-    let args = Args::parse();
     let start_time = Instant::now();
 
     let scan_path = match &args.target {
@@ -52,35 +60,71 @@ fn main() -> anyhow::Result<()> {
 
     log::info!("Scanning for albums in {:?}", scan_path);
     let albums = Album::discover(&scan_path)?;
-    log::info!("Found {} potential albums folders.", albums.len());
+    log::info!("Found {} potential album folders.", albums.len());
+
+    let mut all_tasks = Vec::new();
+    let mut mixed_count = 0;
+
+    for album in &albums {
+        log::debug!("Inspecting album: {:?}", album.path);
+        if !album.validate() {
+            log::warn!("Album failed validation (mixed FLAC/MP3): {:?}", album.path);
+            mixed_count += 1;
+            continue;
+        }
+
+        match convert::collect_album_tasks(album, &args.input, &args.output, args.quality) {
+            Ok(album_tasks) => {
+                log::debug!("Found {} tasks for album: {:?}", album_tasks.len(), album.path);
+                all_tasks.extend(album_tasks);
+            }
+            Err(e) => {
+                log::error!("Failed to prepare tasks for album {:?}: {:#}", album.path, e);
+            }
+        }
+    }
+
+    let task_count = all_tasks.len();
+    log::info!("Prepared {} individual file tasks.", task_count);
+    if mixed_count > 0 {
+        log::info!("Skipped {} mixed-content albums.", mixed_count);
+    }
+
+    if task_count == 0 {
+        log::info!("No tasks to process.");
+        return Ok(());
+    }
+
+    // Set up progress bar
+    let pb = ProgressBar::new(task_count as u64);
+    pb.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")?
+        .progress_chars("#>-"));
 
     let success_count = AtomicUsize::new(0);
     let failure_count = AtomicUsize::new(0);
-    let mixed_count = AtomicUsize::new(0);
 
-    albums.par_iter().for_each(|album| {
-        if !album.validate() {
-            mixed_count.fetch_add(1, Ordering::Relaxed);
-            return;
-        }
-
-        match convert::process_album(album, &args.input, &args.output, args.quality) {
+    all_tasks.par_iter().for_each(|task| {
+        match task.execute() {
             Ok(_) => {
                 success_count.fetch_add(1, Ordering::Relaxed);
             }
             Err(e) => {
-                log::error!("Failed to process album {:?}: {:#}", album.path, e);
+                log::error!("Task failed: {:#}", e);
                 failure_count.fetch_add(1, Ordering::Relaxed);
             }
         }
+        pb.inc(1);
     });
+
+    pb.finish_with_message("Done!");
 
     let duration = start_time.elapsed();
     log::info!("Conversion finished in {:.2?}", duration);
-    log::info!("Summary: {} successful, {} failed, {} skipped (mixed content).", 
+    log::info!("Summary: {} successful, {} failed, {} skipped (mixed albums).", 
                success_count.load(Ordering::Relaxed), 
                failure_count.load(Ordering::Relaxed), 
-               mixed_count.load(Ordering::Relaxed));
+               mixed_count);
 
     Ok(())
 }

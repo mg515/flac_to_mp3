@@ -45,6 +45,16 @@ cargo run --release -- --input <INPUT_DIR> --output <OUTPUT_DIR> [OPTIONS]
 - `-q, --quality <0-9>`: MP3 VBR quality setting (Default: 0).
   - `0`: Highest quality (largest file size).
   - `9`: Lowest quality (smallest file size).
+- `-d, --debug`: Enable debug logging (shows album inspection details).
+
+## Progress Bar
+
+The tool displays a progress bar (similar to `tqdm` in Python) showing:
+- Elapsed time
+- Progress percentage and bar
+- Completed/Total files
+- Estimated time of arrival (ETA)
+- Status message
 
 ### Examples
 

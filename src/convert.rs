@@ -1,10 +1,33 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::fs;
 use anyhow::{Result, Context};
 use crate::album::Album;
 
-pub fn process_album(album: &Album, input_root: &Path, output_root: &Path, quality: u8) -> Result<()> {
+#[derive(Debug)]
+pub enum Task {
+    Convert { input: PathBuf, output: PathBuf, quality: u8 },
+    Copy { input: PathBuf, output: PathBuf },
+}
+
+impl Task {
+    pub fn execute(&self) -> Result<()> {
+        match self {
+            Task::Convert { input, output, quality } => {
+                convert_flac_to_mp3(input, output, *quality)
+            }
+            Task::Copy { input, output } => {
+                fs::copy(input, output)
+                    .with_context(|| format!("Failed to copy file {:?} to {:?}", input, output))?;
+                Ok(())
+            }
+        }
+    }
+}
+
+pub fn collect_album_tasks(album: &Album, input_root: &Path, output_root: &Path, quality: u8) -> Result<Vec<Task>> {
+    let mut tasks = Vec::new();
+
     // Determine the relative path of the album from the input root
     let relative_path = album.path.strip_prefix(input_root)
         .context("Failed to strip prefix from album path")?;
@@ -26,18 +49,24 @@ pub fn process_album(album: &Album, input_root: &Path, output_root: &Path, quali
             Some("flac") => {
                 let output_filename = Path::new(file_name).with_extension("mp3");
                 let output_path = output_dir.join(output_filename);
-                convert_flac_to_mp3(file_path, &output_path, quality)?;
+                tasks.push(Task::Convert {
+                    input: file_path.clone(),
+                    output: output_path,
+                    quality,
+                });
             }
             _ => {
                 // For mp3 or other files, just copy
                 let output_path = output_dir.join(file_name);
-                fs::copy(file_path, &output_path)
-                    .with_context(|| format!("Failed to copy file {:?} to {:?}", file_path, output_path))?;
+                tasks.push(Task::Copy {
+                    input: file_path.clone(),
+                    output: output_path,
+                });
             }
         }
     }
 
-    Ok(())
+    Ok(tasks)
 }
 
 fn convert_flac_to_mp3(input: &Path, output: &Path, quality: u8) -> Result<()> {
