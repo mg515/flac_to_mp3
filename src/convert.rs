@@ -39,6 +39,7 @@ pub fn collect_album_tasks(
     input_root: &Path,
     output_root: &Path,
     quality: u8,
+    force: bool,
 ) -> Result<Vec<Task>> {
     let mut tasks = Vec::new();
 
@@ -65,6 +66,16 @@ pub fn collect_album_tasks(
             Some("flac") => {
                 let output_filename = Path::new(file_name).with_extension("mp3");
                 let output_path = output_dir.join(output_filename);
+
+                if !force && output_path.exists() {
+                    if let Ok(metadata) = fs::metadata(&output_path) {
+                        if metadata.len() > 0 {
+                            log::debug!("Skipping existing file: {:?}", output_path);
+                            continue;
+                        }
+                    }
+                }
+
                 tasks.push(Task::Convert {
                     input: file_path.clone(),
                     output: output_path,
@@ -74,6 +85,18 @@ pub fn collect_album_tasks(
             _ => {
                 // For mp3 or other files, just copy
                 let output_path = output_dir.join(file_name);
+
+                if !force && output_path.exists() {
+                    if let Ok(metadata) = fs::metadata(&output_path) {
+                        if let Ok(input_metadata) = fs::metadata(file_path) {
+                            if metadata.len() == input_metadata.len() {
+                                log::debug!("Skipping existing file: {:?}", output_path);
+                                continue;
+                            }
+                        }
+                    }
+                }
+
                 tasks.push(Task::Copy {
                     input: file_path.clone(),
                     output: output_path,

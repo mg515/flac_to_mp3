@@ -9,6 +9,7 @@ A high-performance, parallelized command-line tool written in Rust to convert mu
   - Converts `.flac` files to `.mp3` using `ffmpeg`.
   - Copies `.mp3` and other non-audio files (artwork, logs, cues) directly to the output.
   - Preserves directory structure.
+  - **Incremental Update**: Skips files that already exist in the output directory (unless `--force` is used).
 - **Safety**: Skips albums that contain mixed FLAC and MP3 content to avoid duplication or overwrite issues (logs a warning).
 - **Quality Control**: Configurable VBR quality settings.
 
@@ -45,6 +46,7 @@ cargo run --release -- --input <INPUT_DIR> --output <OUTPUT_DIR> [OPTIONS]
 - `-q, --quality <0-9>`: MP3 VBR quality setting (Default: 0).
   - `0`: Highest quality (largest file size).
   - `9`: Lowest quality (smallest file size).
+- `-f, --force`: Force overwrite of existing files.
 - `-d, --debug`: Enable debug logging (shows album inspection details).
 
 ## Progress Bar

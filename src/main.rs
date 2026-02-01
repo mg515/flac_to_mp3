@@ -30,6 +30,10 @@ struct Args {
     #[arg(short, long)]
     target: Option<PathBuf>,
 
+    /// Force overwrite of existing files
+    #[arg(short, long)]
+    force: bool,
+
     /// Enable debug logging
     #[arg(short, long)]
     debug: bool,
@@ -73,7 +77,13 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
 
-        match convert::collect_album_tasks(album, &args.input, &args.output, args.quality) {
+        match convert::collect_album_tasks(
+            album,
+            &args.input,
+            &args.output,
+            args.quality,
+            args.force,
+        ) {
             Ok(album_tasks) => {
                 log::debug!(
                     "Found {} tasks for album: {:?}",
